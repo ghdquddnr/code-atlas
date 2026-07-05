@@ -1,0 +1,98 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.7'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.codeatlas'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+def npmCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
+def frontendDir = file('frontend')
+def skipFrontendBuild = providers.gradleProperty('skipFrontendBuild')
+        .map { it.toBoolean() }
+        .orElse(false)
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'com.github.javaparser:javaparser-core:3.26.3'
+    implementation 'org.postgresql:postgresql'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'com.h2database:h2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    dependsOn tasks.named('copyFrontendToStatic')
+    useJUnitPlatform()
+}
+
+tasks.named('compileTestJava') {
+    dependsOn tasks.named('copyFrontendToStatic')
+}
+
+tasks.register('frontendInstall', Exec) {
+    onlyIf { !skipFrontendBuild.get() }
+    workingDir frontendDir
+    commandLine npmCommand, 'ci'
+    inputs.files(
+            file('frontend/package.json'),
+            file('frontend/package-lock.json')
+    )
+    outputs.dir(file('frontend/node_modules'))
+}
+
+tasks.register('frontendBuild', Exec) {
+    onlyIf { !skipFrontendBuild.get() }
+    dependsOn tasks.named('frontendInstall')
+    workingDir frontendDir
+    commandLine npmCommand, 'run', 'build'
+    inputs.files(
+            file('frontend/package.json'),
+            file('frontend/package-lock.json'),
+            file('frontend/tsconfig.json'),
+            file('frontend/tsconfig.node.json'),
+            file('frontend/vite.config.ts'),
+            file('frontend/tailwind.config.ts'),
+            file('frontend/postcss.config.js')
+    )
+    inputs.dir(file('frontend/src'))
+    outputs.dir(file('frontend/dist'))
+}
+
+tasks.register('copyFrontendToStatic', Copy) {
+    onlyIf { !skipFrontendBuild.get() }
+    dependsOn tasks.named('processResources'), tasks.named('frontendBuild')
+    from(file('frontend/dist'))
+    into(layout.buildDirectory.dir('resources/main/static'))
+}
+
+tasks.named('bootJar') {
+    dependsOn tasks.named('copyFrontendToStatic')
+}
+
+tasks.named('bootRun') {
+    dependsOn tasks.named('copyFrontendToStatic')
+}
+
+tasks.named('resolveMainClassName') {
+    dependsOn tasks.named('copyFrontendToStatic')
+}

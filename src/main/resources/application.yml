@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: code-atlas
+  datasource:
+    url: ${CODE_ATLAS_DB_URL:jdbc:postgresql://localhost:5432/code_atlas}
+    username: ${CODE_ATLAS_DB_USERNAME:code_atlas}
+    password: ${CODE_ATLAS_DB_PASSWORD:code_atlas}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  servlet:
+    multipart:
+      max-file-size: ${CODE_ATLAS_MAX_UPLOAD_SIZE:200MB}
+      max-request-size: ${CODE_ATLAS_MAX_UPLOAD_SIZE:200MB}
+
+server:
+  port: ${CODE_ATLAS_SERVER_PORT:8080}
+
+code-atlas:
+  storage:
+    projects-path: ${CODE_ATLAS_PROJECTS_STORAGE_PATH:data/projects}
+  llm:
+    enabled: ${CODE_ATLAS_LLM_ENABLED:true}
+    provider: ollama
+    base-url: ${CODE_ATLAS_LLM_BASE_URL:http://localhost:11434}
+    model: ${CODE_ATLAS_LLM_MODEL:gemma4:e4b}
+  github:
+    enabled: ${CODE_ATLAS_GITHUB_ENABLED:false}
+    base-url: ${CODE_ATLAS_GITHUB_BASE_URL:https://api.github.com}
+    token: ${CODE_ATLAS_GITHUB_TOKEN:}
+    owner: ${CODE_ATLAS_GITHUB_OWNER:}
+    repository: ${CODE_ATLAS_GITHUB_REPOSITORY:}

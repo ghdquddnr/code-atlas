@@ -1,0 +1,40 @@
+services:
+  app:
+    build:
+      context: .
+    container_name: code-atlas-app
+    environment:
+      CODE_ATLAS_DB_URL: jdbc:postgresql://postgres:5432/code_atlas
+      CODE_ATLAS_DB_USERNAME: code_atlas
+      CODE_ATLAS_DB_PASSWORD: code_atlas
+      CODE_ATLAS_LLM_BASE_URL: http://host.docker.internal:11434
+      CODE_ATLAS_LLM_MODEL: gemma4:e4b
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./samples:/samples:ro
+      - code_atlas_project_storage:/app/data/projects
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: code-atlas-postgres
+    environment:
+      POSTGRES_DB: code_atlas
+      POSTGRES_USER: code_atlas
+      POSTGRES_PASSWORD: code_atlas
+    ports:
+      - "${CODE_ATLAS_POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - code_atlas_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U code_atlas -d code_atlas"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  code_atlas_postgres_data:
+  code_atlas_project_storage:

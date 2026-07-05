@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.legacy.order.mapper.OrderMapper">
+
+    <insert id="insertOrder" parameterType="com.example.legacy.order.dto.CreateOrderRequest">
+        INSERT INTO TB_ORDER (
+            CUSTOMER_ID,
+            ORDER_STATUS,
+            ORDER_MEMO,
+            ORDERED_AT
+        )
+        VALUES (
+            #{customerId},
+            'CREATED',
+            #{memo},
+            CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <select id="selectOrderDetail" parameterType="long" resultType="com.example.legacy.order.dto.OrderResponse">
+        SELECT
+            O.ORDER_ID AS orderId,
+            O.CUSTOMER_ID AS customerId,
+            O.ORDER_STATUS AS status,
+            O.ORDERED_AT AS orderedAt
+        FROM TB_ORDER O
+        JOIN TB_ORDER_ITEM OI ON O.ORDER_ID = OI.ORDER_ID
+        JOIN TB_PRODUCT P ON OI.PRODUCT_ID = P.PRODUCT_ID
+        WHERE O.ORDER_ID = #{orderId}
+    </select>
+
+    <select id="selectRecentOrders" resultType="com.example.legacy.order.dto.OrderResponse">
+        SELECT
+            ORDER_ID AS orderId,
+            CUSTOMER_ID AS customerId,
+            ORDER_STATUS AS status,
+            ORDERED_AT AS orderedAt
+        FROM TB_ORDER
+        WHERE ORDERED_AT >= CURRENT_DATE - 7
+        ORDER BY ORDERED_AT DESC
+    </select>
+
+    <update id="updateOrderStatus">
+        UPDATE TB_ORDER
+        SET ORDER_STATUS = #{status}
+        WHERE ORDER_ID = #{orderId}
+    </update>
+
+    <delete id="deleteOrder">
+        DELETE FROM TB_ORDER
+        WHERE ORDER_ID = #{orderId}
+    </delete>
+
+</mapper>

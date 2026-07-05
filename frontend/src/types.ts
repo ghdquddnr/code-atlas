@@ -170,13 +170,21 @@ export type GitHubReleaseDraft = {
 };
 
 export type GitHubReleasePublishResult = {
-  id?: string;
+  id: number;
+  projectId: number;
+  baseSnapshotId: number;
+  targetSnapshotId: number;
+  requestedAt: string;
+  completedAt?: string;
+  status: "PENDING" | "SUCCESS" | "FAILED";
   tagName: string;
   releaseName: string;
+  releaseId?: string;
   htmlUrl?: string;
   apiUrl?: string;
   draft: boolean;
   prerelease: boolean;
+  errorMessage?: string;
 };
 
 export type AnalysisSnapshot = {

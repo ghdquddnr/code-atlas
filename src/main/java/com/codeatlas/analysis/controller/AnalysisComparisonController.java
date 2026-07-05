@@ -3,7 +3,7 @@ package com.codeatlas.analysis.controller;
 import com.codeatlas.analysis.dto.AnalysisComparisonResponse;
 import com.codeatlas.analysis.dto.AnalysisSnapshotResponse;
 import com.codeatlas.analysis.dto.GitHubReleaseDraftResponse;
-import com.codeatlas.analysis.dto.GitHubReleasePublishResponse;
+import com.codeatlas.analysis.dto.GitHubReleasePublishHistoryResponse;
 import com.codeatlas.analysis.dto.ReleaseRiskTrendPointResponse;
 import com.codeatlas.analysis.dto.UpdateAnalysisSnapshotMetadataRequest;
 import com.codeatlas.analysis.service.AnalysisSnapshotService;
@@ -53,6 +53,11 @@ public class AnalysisComparisonController {
         return ApiResponse.ok(analysisSnapshotService.riskTrend(projectId));
     }
 
+    @GetMapping("/github-release-publish-history")
+    public ApiResponse<List<GitHubReleasePublishHistoryResponse>> findGitHubReleasePublishHistory(@PathVariable Long projectId) {
+        return ApiResponse.ok(analysisSnapshotService.findGitHubReleasePublishHistory(projectId));
+    }
+
     @GetMapping("/comparison/latest")
     public ApiResponse<AnalysisComparisonResponse> compareLatest(@PathVariable Long projectId) {
         return ApiResponse.ok(analysisSnapshotService.compareLatest(projectId));
@@ -97,7 +102,7 @@ public class AnalysisComparisonController {
     }
 
     @PostMapping("/comparison/latest/github-release-draft/publish")
-    public ApiResponse<GitHubReleasePublishResponse> publishLatestGitHubReleaseDraft(@PathVariable Long projectId) {
+    public ApiResponse<GitHubReleasePublishHistoryResponse> publishLatestGitHubReleaseDraft(@PathVariable Long projectId) {
         return ApiResponse.ok(analysisSnapshotService.publishLatestGitHubReleaseDraft(projectId));
     }
 
@@ -177,7 +182,7 @@ public class AnalysisComparisonController {
     }
 
     @PostMapping("/comparison/github-release-draft/publish")
-    public ApiResponse<GitHubReleasePublishResponse> publishGitHubReleaseDraft(
+    public ApiResponse<GitHubReleasePublishHistoryResponse> publishGitHubReleaseDraft(
             @PathVariable Long projectId,
             @RequestParam Long baseSnapshotId,
             @RequestParam Long targetSnapshotId

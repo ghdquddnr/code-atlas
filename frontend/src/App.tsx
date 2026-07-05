@@ -566,6 +566,7 @@ function CompareTab({ projectId }: { projectId: number }) {
   const [report, setReport] = useState<GeneratedDocument | null>(null);
   const [githubDraft, setGithubDraft] = useState<GitHubReleaseDraft | null>(null);
   const [githubPublishResult, setGithubPublishResult] = useState<GitHubReleasePublishResult | null>(null);
+  const [githubPublishHistory, setGithubPublishHistory] = useState<GitHubReleasePublishResult[]>([]);
   const [riskTrend, setRiskTrend] = useState<ReleaseRiskTrendPoint[]>([]);
   const [error, setError] = useState("");
 
@@ -585,8 +586,10 @@ function CompareTab({ projectId }: { projectId: number }) {
     try {
       const nextSnapshots = await api.snapshots(projectId);
       const nextTrend = await api.riskTrend(projectId);
+      const nextPublishHistory = await api.githubPublishHistory(projectId);
       setSnapshots(nextSnapshots);
       setRiskTrend(nextTrend);
+      setGithubPublishHistory(nextPublishHistory);
       setTargetSnapshotId(String(nextSnapshots[0]?.id ?? ""));
       setBaseSnapshotId(String(nextSnapshots[1]?.id ?? ""));
       setSnapshotLabel(nextSnapshots[0]?.label ?? "");
@@ -668,6 +671,7 @@ function CompareTab({ projectId }: { projectId: number }) {
         ? await api.publishSnapshotGitHubReleaseDraft(projectId, Number(baseSnapshotId), Number(targetSnapshotId))
         : await api.publishGitHubReleaseDraft(projectId);
       setGithubPublishResult(result);
+      setGithubPublishHistory(await api.githubPublishHistory(projectId));
     } catch (exception) {
       setGithubPublishResult(null);
       setError(exception instanceof Error ? exception.message : "GitHub Release Draft 게시에 실패했습니다.");
@@ -806,11 +810,12 @@ function CompareTab({ projectId }: { projectId: number }) {
       {githubDraft && <GitHubDraftPanel draft={githubDraft} />}
       {githubPublishResult && (
         <Row
-          title="GitHub Release Draft Published"
-          meta={githubPublishResult.tagName}
-          detail={githubPublishResult.htmlUrl ?? githubPublishResult.apiUrl ?? githubPublishResult.releaseName}
+          title={`GitHub Release Draft ${githubPublishResult.status}`}
+          meta={`${githubPublishResult.tagName} · #${githubPublishResult.baseSnapshotId} -> #${githubPublishResult.targetSnapshotId}`}
+          detail={githubPublishResult.errorMessage ?? githubPublishResult.htmlUrl ?? githubPublishResult.apiUrl ?? githubPublishResult.releaseName}
         />
       )}
+      {githubPublishHistory.length > 0 && <GitHubPublishHistoryPanel history={githubPublishHistory} />}
       {comparison && (
         <div className="grid gap-3">
           <div className="grid grid-cols-5 gap-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
@@ -829,6 +834,27 @@ function CompareTab({ projectId }: { projectId: number }) {
           <DiffSection title="Flows" section={comparison.flows} />
         </div>
       )}
+    </div>
+  );
+}
+
+function GitHubPublishHistoryPanel({ history }: { history: GitHubReleasePublishResult[] }) {
+  return (
+    <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <strong className="text-sm">GitHub 게시 이력</strong>
+        <Badge>{history.length}건</Badge>
+      </div>
+      <div className="grid gap-2">
+        {history.map((item) => (
+          <Row
+            key={item.id}
+            title={`${item.status} · ${item.releaseName}`}
+            meta={`${item.tagName} · #${item.baseSnapshotId} -> #${item.targetSnapshotId}`}
+            detail={item.errorMessage ?? item.htmlUrl ?? item.apiUrl ?? new Date(item.requestedAt).toLocaleString()}
+          />
+        ))}
+      </div>
     </div>
   );
 }

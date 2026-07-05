@@ -179,8 +179,17 @@ class ApiContractIntegrationTest {
                 .andExpect(jsonPath("$.data.draft").value(true));
 
         mockMvc.perform(post("/api/projects/{projectId}/analysis/comparison/latest/github-release-draft/publish", projectId))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", containsString("GitHub publishing is disabled")));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andExpect(jsonPath("$.data.errorMessage", containsString("GitHub publishing is disabled")))
+                .andExpect(jsonPath("$.data.baseSnapshotId").exists())
+                .andExpect(jsonPath("$.data.targetSnapshotId").exists());
+
+        mockMvc.perform(get("/api/projects/{projectId}/analysis/github-release-publish-history", projectId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.data[0].errorMessage", containsString("GitHub publishing is disabled")));
 
         mockMvc.perform(post("/api/projects/{projectId}/questions", projectId)
                         .contentType(MediaType.APPLICATION_JSON)

@@ -61,6 +61,8 @@ export const api = {
     }),
   riskTrend: (projectId: number) =>
     request<ReleaseRiskTrendPoint[]>(`/api/projects/${projectId}/analysis/risk-trend`),
+  githubPublishHistory: (projectId: number) =>
+    request<GitHubReleasePublishResult[]>(`/api/projects/${projectId}/analysis/github-release-publish-history`),
   comparison: (projectId: number) =>
     request<AnalysisComparison>(`/api/projects/${projectId}/analysis/comparison/latest`),
   comparisonReport: (projectId: number) =>

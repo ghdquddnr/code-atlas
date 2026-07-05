@@ -2,12 +2,13 @@ package com.codeatlas.analysis.service;
 
 import com.codeatlas.analysis.domain.AnalysisJob;
 import com.codeatlas.analysis.domain.AnalysisSnapshot;
+import com.codeatlas.analysis.domain.GitHubReleasePublishHistory;
 import com.codeatlas.analysis.domain.SourceFile;
 import com.codeatlas.analysis.dto.AnalysisComparisonResponse;
 import com.codeatlas.analysis.dto.AnalysisDiffSectionResponse;
 import com.codeatlas.analysis.dto.AnalysisSnapshotResponse;
 import com.codeatlas.analysis.dto.GitHubReleaseDraftResponse;
-import com.codeatlas.analysis.dto.GitHubReleasePublishResponse;
+import com.codeatlas.analysis.dto.GitHubReleasePublishHistoryResponse;
 import com.codeatlas.analysis.dto.ReleaseRiskResponse;
 import com.codeatlas.analysis.dto.ReleaseRiskTrendPointResponse;
 import com.codeatlas.analysis.dto.UpdateAnalysisSnapshotMetadataRequest;
@@ -15,6 +16,7 @@ import com.codeatlas.document.dto.GeneratedDocumentResponse;
 import com.codeatlas.analysis.repository.AnalysisSnapshotRepository;
 import com.codeatlas.analysis.repository.AnalysisJobRepository;
 import com.codeatlas.analysis.repository.ApiFlowRepository;
+import com.codeatlas.analysis.repository.GitHubReleasePublishHistoryRepository;
 import com.codeatlas.analysis.repository.MyBatisStatementRepository;
 import com.codeatlas.analysis.repository.SourceFileRepository;
 import com.codeatlas.analysis.repository.SpringApiRepository;
@@ -39,6 +41,7 @@ public class AnalysisSnapshotService {
     private final SourceFileRepository sourceFileRepository;
     private final ApiFlowRepository apiFlowRepository;
     private final GitHubReleasePublisher gitHubReleasePublisher;
+    private final GitHubReleasePublishHistoryRepository gitHubReleasePublishHistoryRepository;
 
     public AnalysisSnapshotService(
             ProjectService projectService,
@@ -48,7 +51,8 @@ public class AnalysisSnapshotService {
             MyBatisStatementRepository myBatisStatementRepository,
             SourceFileRepository sourceFileRepository,
             ApiFlowRepository apiFlowRepository,
-            GitHubReleasePublisher gitHubReleasePublisher
+            GitHubReleasePublisher gitHubReleasePublisher,
+            GitHubReleasePublishHistoryRepository gitHubReleasePublishHistoryRepository
     ) {
         this.projectService = projectService;
         this.analysisJobRepository = analysisJobRepository;
@@ -58,6 +62,7 @@ public class AnalysisSnapshotService {
         this.sourceFileRepository = sourceFileRepository;
         this.apiFlowRepository = apiFlowRepository;
         this.gitHubReleasePublisher = gitHubReleasePublisher;
+        this.gitHubReleasePublishHistoryRepository = gitHubReleasePublishHistoryRepository;
     }
 
     @Transactional
@@ -213,14 +218,42 @@ public class AnalysisSnapshotService {
         return toGitHubReleaseDraft(projectId, findSnapshot(projectId, baseSnapshotId), findSnapshot(projectId, targetSnapshotId));
     }
 
-    @Transactional(readOnly = true)
-    public GitHubReleasePublishResponse publishLatestGitHubReleaseDraft(Long projectId) {
-        return gitHubReleasePublisher.publish(generateLatestGitHubReleaseDraft(projectId));
+    @Transactional
+    public GitHubReleasePublishHistoryResponse publishLatestGitHubReleaseDraft(Long projectId) {
+        projectService.findProject(projectId);
+        List<AnalysisSnapshot> snapshots = analysisSnapshotRepository.findTop2ByProjectIdOrderByCreatedAtDesc(projectId);
+        if (snapshots.size() < 2) {
+            throw new IllegalStateException("At least two completed analysis snapshots are required for a release draft.");
+        }
+        return publishGitHubReleaseDraft(projectId, snapshots.get(1), snapshots.get(0));
+    }
+
+    @Transactional
+    public GitHubReleasePublishHistoryResponse publishGitHubReleaseDraft(Long projectId, Long baseSnapshotId, Long targetSnapshotId) {
+        projectService.findProject(projectId);
+        return publishGitHubReleaseDraft(projectId, findSnapshot(projectId, baseSnapshotId), findSnapshot(projectId, targetSnapshotId));
     }
 
     @Transactional(readOnly = true)
-    public GitHubReleasePublishResponse publishGitHubReleaseDraft(Long projectId, Long baseSnapshotId, Long targetSnapshotId) {
-        return gitHubReleasePublisher.publish(generateGitHubReleaseDraft(projectId, baseSnapshotId, targetSnapshotId));
+    public List<GitHubReleasePublishHistoryResponse> findGitHubReleasePublishHistory(Long projectId) {
+        projectService.findProject(projectId);
+        return gitHubReleasePublishHistoryRepository.findTop20ByProjectIdOrderByRequestedAtDesc(projectId).stream()
+                .map(this::toPublishHistoryResponse)
+                .toList();
+    }
+
+    private GitHubReleasePublishHistoryResponse publishGitHubReleaseDraft(Long projectId, AnalysisSnapshot base, AnalysisSnapshot target) {
+        GitHubReleaseDraftResponse draft = toGitHubReleaseDraft(projectId, base, target);
+        GitHubReleasePublishHistory history = gitHubReleasePublishHistoryRepository.save(
+                GitHubReleasePublishHistory.pending(target.getProject(), base, target, draft)
+        );
+
+        try {
+            history.markSucceeded(gitHubReleasePublisher.publish(draft));
+        } catch (RuntimeException exception) {
+            history.markFailed(exception.getMessage());
+        }
+        return toPublishHistoryResponse(history);
     }
 
     private AnalysisComparisonResponse compareSnapshots(
@@ -483,6 +516,26 @@ public class AnalysisSnapshotService {
                 releaseNotes.content(),
                 true,
                 isPrerelease(releaseName)
+        );
+    }
+
+    private GitHubReleasePublishHistoryResponse toPublishHistoryResponse(GitHubReleasePublishHistory history) {
+        return new GitHubReleasePublishHistoryResponse(
+                history.getId(),
+                history.getProject().getId(),
+                history.getBaseSnapshot().getId(),
+                history.getTargetSnapshot().getId(),
+                history.getRequestedAt(),
+                history.getCompletedAt(),
+                history.getStatus(),
+                history.getTagName(),
+                history.getReleaseName(),
+                history.getReleaseId(),
+                history.getHtmlUrl(),
+                history.getApiUrl(),
+                history.isDraft(),
+                history.isPrerelease(),
+                history.getErrorMessage()
         );
     }
 

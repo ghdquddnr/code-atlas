@@ -13,7 +13,9 @@ import type {
   QuestionAnswer,
   SourceFile,
   SpringApi,
-  TableUsage
+  SpringApiDetail,
+  TableUsage,
+  TableUsageDetail
 } from "../types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -41,6 +43,15 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }),
+  uploadProject: (payload: { name: string; file: File }) => {
+    const formData = new FormData();
+    formData.append("name", payload.name);
+    formData.append("file", payload.file);
+    return request<Project>("/api/projects/upload", {
+      method: "POST",
+      body: formData
+    });
+  },
   analyze: (projectId: number) =>
     request(`/api/projects/${projectId}/analyze`, { method: "POST" }),
   resetAnalysis: (projectId: number) =>
@@ -48,7 +59,11 @@ export const api = {
   dashboard: (projectId: number) => request<Dashboard>(`/api/projects/${projectId}/dashboard`),
   sourceFiles: (projectId: number) => request<SourceFile[]>(`/api/projects/${projectId}/source-files`),
   apis: (projectId: number) => request<SpringApi[]>(`/api/projects/${projectId}/apis`),
+  apiDetail: (projectId: number, apiId: number) =>
+    request<SpringApiDetail>(`/api/projects/${projectId}/apis/${apiId}`),
   tables: (projectId: number) => request<TableUsage[]>(`/api/projects/${projectId}/tables`),
+  tableDetail: (projectId: number, tableName: string) =>
+    request<TableUsageDetail>(`/api/projects/${projectId}/tables/${encodeURIComponent(tableName)}`),
   flows: (projectId: number) => request<ApiFlow[]>(`/api/projects/${projectId}/flows`),
   graph: (projectId: number) => request<ProjectGraph>(`/api/projects/${projectId}/graph`),
   snapshots: (projectId: number) =>

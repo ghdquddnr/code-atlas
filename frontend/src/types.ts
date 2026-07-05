@@ -76,6 +76,31 @@ export type TableUsage = {
   statementCount: number;
 };
 
+export type MyBatisStatement = {
+  id: number;
+  projectId: number;
+  namespace: string;
+  statementId: string;
+  statementType: string;
+  sql: string;
+  tableNames: string[];
+  parameterType?: string;
+  resultType?: string;
+  sourceFilePath: string;
+  extractedAt: string;
+};
+
+export type SpringApiDetail = {
+  api: SpringApi;
+  flows: ApiFlow[];
+};
+
+export type TableUsageDetail = {
+  tableName: string;
+  statements: MyBatisStatement[];
+  flows: ApiFlow[];
+};
+
 export type ApiFlow = {
   id: number;
   httpMethod: string;

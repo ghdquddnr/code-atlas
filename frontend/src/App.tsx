@@ -26,7 +26,9 @@ import type {
   ReleaseRiskTrendPoint,
   SourceFile,
   SpringApi,
-  TableUsage
+  SpringApiDetail,
+  TableUsage,
+  TableUsageDetail
 } from "./types";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -61,6 +63,8 @@ function App() {
   const [isError, setIsError] = useState(false);
   const [projectName, setProjectName] = useState("legacy-spring-mybatis");
   const [sourcePath, setSourcePath] = useState("/samples/legacy-spring-mybatis");
+  const [uploadName, setUploadName] = useState("uploaded-legacy-project");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   async function safeRun(action: () => Promise<void>) {
     try {
@@ -96,6 +100,18 @@ function App() {
     event.preventDefault();
     const project = await api.createProject({ name: projectName.trim(), sourcePath: sourcePath.trim() });
     setStatus(`프로젝트가 등록됐습니다: ${project.name}`);
+    await loadProjects();
+    await selectProject(project);
+  }
+
+  async function uploadProject(event: React.FormEvent) {
+    event.preventDefault();
+    if (!uploadFile) {
+      throw new Error("업로드할 ZIP 파일을 선택하세요.");
+    }
+    const project = await api.uploadProject({ name: uploadName.trim(), file: uploadFile });
+    setStatus(`ZIP 프로젝트가 업로드됐습니다: ${project.name}`);
+    setUploadFile(null);
     await loadProjects();
     await selectProject(project);
   }
@@ -185,6 +201,29 @@ function App() {
             <Button type="submit">등록</Button>
           </form>
 
+          <form onSubmit={(event) => safeRun(() => uploadProject(event))} className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-white p-3">
+            <div>
+              <strong className="text-sm">ZIP 업로드</strong>
+              <p className="text-xs text-slate-500">로컬 ZIP 파일을 업로드해 분석 프로젝트로 등록합니다.</p>
+            </div>
+            <Label title="이름">
+              <Input value={uploadName} onChange={(event) => setUploadName(event.target.value)} />
+            </Label>
+            <Label title="ZIP 파일">
+              <Input
+                type="file"
+                accept=".zip,application/zip,application/x-zip-compressed"
+                onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+              />
+            </Label>
+            {uploadFile && (
+              <div className="break-all rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                선택됨: {uploadFile.name}
+              </div>
+            )}
+            <Button type="submit">ZIP 업로드</Button>
+          </form>
+
           <div className="mt-5 mb-2 flex justify-between text-xs font-bold text-slate-500">
             <span>프로젝트 목록</span>
             <span>선택 시 동기화</span>
@@ -253,8 +292,8 @@ function App() {
               <EmptyState message="프로젝트를 선택하면 분석 결과를 볼 수 있습니다." />
             ) : (
               <>
-                {activeTab === "apis" && <ApiTab apis={apis} />}
-                {activeTab === "tables" && <TableTab tables={tables} />}
+                {activeTab === "apis" && <ApiTab projectId={selectedProject.id} apis={apis} />}
+                {activeTab === "tables" && <TableTab projectId={selectedProject.id} tables={tables} />}
                 {activeTab === "flows" && <FlowTab flows={flows} />}
                 {activeTab === "graph" && <GraphTab graph={graph} />}
                 {activeTab === "impact" && <ImpactTab apis={apis} flows={flows} sourceFiles={sourceFiles} />}
@@ -303,13 +342,33 @@ function MetricGrid({ dashboard }: { dashboard: Dashboard | null }) {
   );
 }
 
-function ApiTab({ apis }: { apis: SpringApi[] }) {
+function ApiTab({ projectId, apis }: { projectId: number; apis: SpringApi[] }) {
   const [query, setQuery] = useState("");
   const [method, setMethod] = useState("");
+  const [openApiId, setOpenApiId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<SpringApiDetail | null>(null);
+  const [detailError, setDetailError] = useState("");
   const filtered = apis.filter((item) => {
     const searchable = `${item.httpMethod} ${item.path} ${item.controllerClassName} ${item.methodName} ${item.sourceFilePath}`;
     return (!method || item.httpMethod === method) && includesQuery(searchable, normalize(query));
   });
+
+  async function toggleDetail(apiId: number) {
+    if (openApiId === apiId) {
+      setOpenApiId(null);
+      setDetail(null);
+      setDetailError("");
+      return;
+    }
+    setOpenApiId(apiId);
+    setDetail(null);
+    setDetailError("");
+    try {
+      setDetail(await api.apiDetail(projectId, apiId));
+    } catch (exception) {
+      setDetailError(exception instanceof Error ? exception.message : "API 상세 정보를 불러오지 못했습니다.");
+    }
+  }
 
   return (
     <div className="grid gap-3">
@@ -326,16 +385,47 @@ function ApiTab({ apis }: { apis: SpringApi[] }) {
       </FilterRow>
       <ResultList empty="분석된 API가 없습니다.">
         {filtered.map((item) => (
-          <Row key={item.id} title={`${item.httpMethod} ${item.path}`} meta={`${item.controllerClassName}.${item.methodName}()`} detail={`${item.sourceFilePath}:${item.lineNumber ?? "unknown"}`} />
+          <DetailItem key={item.id}>
+            <Row
+              title={`${item.httpMethod} ${item.path}`}
+              meta={`${item.controllerClassName}.${item.methodName}()`}
+              detail={`${item.sourceFilePath}:${item.lineNumber ?? "unknown"}`}
+              actionLabel={openApiId === item.id ? "닫기" : "상세"}
+              onAction={() => void toggleDetail(item.id)}
+            />
+            {openApiId === item.id && (
+              <ApiDetailPanel detail={detail} error={detailError} />
+            )}
+          </DetailItem>
         ))}
       </ResultList>
     </div>
   );
 }
 
-function TableTab({ tables }: { tables: TableUsage[] }) {
+function TableTab({ projectId, tables }: { projectId: number; tables: TableUsage[] }) {
   const [query, setQuery] = useState("");
+  const [openTableName, setOpenTableName] = useState<string | null>(null);
+  const [detail, setDetail] = useState<TableUsageDetail | null>(null);
+  const [detailError, setDetailError] = useState("");
   const filtered = tables.filter((table) => includesQuery(table.tableName, normalize(query)));
+
+  async function toggleDetail(tableName: string) {
+    if (openTableName === tableName) {
+      setOpenTableName(null);
+      setDetail(null);
+      setDetailError("");
+      return;
+    }
+    setOpenTableName(tableName);
+    setDetail(null);
+    setDetailError("");
+    try {
+      setDetail(await api.tableDetail(projectId, tableName));
+    } catch (exception) {
+      setDetailError(exception instanceof Error ? exception.message : "테이블 상세 정보를 불러오지 못했습니다.");
+    }
+  }
 
   return (
     <div className="grid gap-3">
@@ -346,7 +436,17 @@ function TableTab({ tables }: { tables: TableUsage[] }) {
       </FilterRow>
       <ResultList empty="분석된 테이블이 없습니다.">
         {filtered.map((table) => (
-          <Row key={table.tableName} title={table.tableName} meta={`${table.statementCount} SQL statement(s)`} />
+          <DetailItem key={table.tableName}>
+            <Row
+              title={table.tableName}
+              meta={`${table.statementCount} SQL statement(s)`}
+              actionLabel={openTableName === table.tableName ? "닫기" : "상세"}
+              onAction={() => void toggleDetail(table.tableName)}
+            />
+            {openTableName === table.tableName && (
+              <TableDetailPanel detail={detail} error={detailError} />
+            )}
+          </DetailItem>
         ))}
       </ResultList>
     </div>
@@ -999,6 +1099,117 @@ function SectionTitle({ title, description }: { title: string; description: stri
   );
 }
 
+function DetailItem({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid gap-2">
+      {children}
+    </div>
+  );
+}
+
+function ApiDetailPanel({ detail, error }: { detail: SpringApiDetail | null; error: string }) {
+  if (error) return <EmptyState message={error} />;
+  if (!detail) return <EmptyState message="API 상세 정보를 불러오는 중입니다." />;
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+      <div className="grid grid-cols-4 gap-2 max-lg:grid-cols-2 max-sm:grid-cols-1">
+        <DetailMetric title="Request DTO" value={detail.api.requestDtoName ?? "-"} />
+        <DetailMetric title="Response DTO" value={detail.api.responseDtoName ?? "-"} />
+        <DetailMetric title="Controller" value={detail.api.controllerClassName} />
+        <DetailMetric title="Method" value={detail.api.methodName} />
+      </div>
+      <div className="rounded-md border border-blue-100 bg-white p-3">
+        <strong className="mb-2 block text-xs uppercase text-blue-700">연결 Flow</strong>
+        {detail.flows.length === 0 ? (
+          <span className="text-xs text-slate-500">연결된 Flow가 없습니다.</span>
+        ) : (
+          <div className="grid gap-2">
+            {detail.flows.map((flow) => (
+              <FlowDetail key={flow.id} flow={flow} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TableDetailPanel({ detail, error }: { detail: TableUsageDetail | null; error: string }) {
+  if (error) return <EmptyState message={error} />;
+  if (!detail) return <EmptyState message="테이블 상세 정보를 불러오는 중입니다." />;
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+      <div className="grid grid-cols-3 gap-2 max-md:grid-cols-1">
+        <DetailMetric title="Table" value={detail.tableName} />
+        <DetailMetric title="SQL Statements" value={String(detail.statements.length)} />
+        <DetailMetric title="API Flows" value={String(detail.flows.length)} />
+      </div>
+      <div className="grid grid-cols-2 gap-3 max-xl:grid-cols-1">
+        <div className="rounded-md border border-blue-100 bg-white p-3">
+          <strong className="mb-2 block text-xs uppercase text-blue-700">MyBatis Statements</strong>
+          {detail.statements.length === 0 ? (
+            <span className="text-xs text-slate-500">연결된 SQL이 없습니다.</span>
+          ) : (
+            <div className="grid gap-2">
+              {detail.statements.map((statement) => (
+                <div key={statement.id} className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-2">
+                  <strong className="break-all text-xs">{statement.namespace}.{statement.statementId}</strong>
+                  <span className="text-xs font-bold text-slate-500">{statement.statementType} · {statement.sourceFilePath}</span>
+                  <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-2 text-[11px] leading-relaxed text-blue-100">
+                    {statement.sql}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="rounded-md border border-blue-100 bg-white p-3">
+          <strong className="mb-2 block text-xs uppercase text-blue-700">API Flows</strong>
+          {detail.flows.length === 0 ? (
+            <span className="text-xs text-slate-500">연결된 Flow가 없습니다.</span>
+          ) : (
+            <div className="grid gap-2">
+              {detail.flows.map((flow) => (
+                <FlowDetail key={flow.id} flow={flow} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailMetric({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-md border border-blue-100 bg-white p-3">
+      <span className="block text-xs font-black uppercase text-blue-700">{title}</span>
+      <strong className="mt-1 block break-all text-sm text-slate-800">{value}</strong>
+    </div>
+  );
+}
+
+function FlowDetail({ flow }: { flow: ApiFlow }) {
+  return (
+    <div className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-2">
+      <strong className="break-all text-xs">{flow.httpMethod} {flow.apiPath}</strong>
+      <span className="break-all text-xs text-slate-600">
+        {flow.serviceClassName}.{flow.serviceMethodName}() -&gt; {flow.mapperNamespace}.{flow.mapperStatementId}
+      </span>
+      <span className="break-all text-xs text-slate-500">
+        Tables: {(flow.tableNames ?? []).join(", ") || "-"}
+      </span>
+      {flow.methodCallPath.length > 0 && (
+        <span className="break-all text-xs text-slate-500">
+          Call path: {flow.methodCallPath.map((step) => `${step.sourceClassName}.${step.sourceMethodName} -> ${step.targetClassName}.${step.targetMethodName}`).join(" / ")}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function FilterRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[minmax(220px,1fr)_repeat(3,auto)] items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 max-lg:grid-cols-1">
@@ -1012,12 +1223,29 @@ function ResultList({ children, empty }: { children: React.ReactNode; empty: str
   return <div className="grid gap-2">{childArray.length > 0 ? children : <EmptyState message={empty} />}</div>;
 }
 
-function Row({ title, meta, detail }: { title: string; meta?: string; detail?: string }) {
+function Row({
+  title,
+  meta,
+  detail,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  meta?: string;
+  detail?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
-    <article className="grid grid-cols-[minmax(220px,1.1fr)_minmax(180px,1fr)_minmax(140px,0.8fr)] gap-3 rounded-lg border border-slate-200 bg-white p-3 max-lg:grid-cols-1">
+    <article className="grid grid-cols-[minmax(220px,1.1fr)_minmax(180px,1fr)_minmax(140px,0.8fr)_auto] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 max-lg:grid-cols-1">
       <strong className="break-all text-sm">{title}</strong>
       <span className="break-all text-xs text-slate-500">{meta}</span>
       <span className="break-all text-xs text-slate-500">{detail}</span>
+      {onAction && (
+        <Button variant="secondary" onClick={onAction}>
+          {actionLabel ?? "상세"}
+        </Button>
+      )}
     </article>
   );
 }

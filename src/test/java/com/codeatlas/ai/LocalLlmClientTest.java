@@ -20,7 +20,9 @@ class LocalLlmClientTest {
     void generatesTextWithConfiguredOllamaModel() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        LocalLlmClient client = new LocalLlmClient(builder, true, "http://ollama.test", "gemma4:e4b");
+        LlmSettingRepository settingRepository = org.mockito.Mockito.mock(LlmSettingRepository.class);
+        org.mockito.Mockito.when(settingRepository.findAll()).thenReturn(java.util.List.of());
+        LocalLlmClient client = new LocalLlmClient(builder, settingRepository, new com.fasterxml.jackson.databind.ObjectMapper(), true, "http://ollama.test", "gemma4:e4b");
 
         server.expect(requestTo("http://ollama.test/api/generate"))
                 .andExpect(method(HttpMethod.POST))
@@ -38,7 +40,11 @@ class LocalLlmClientTest {
     void returnsEmptyWhenDisabled() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        LocalLlmClient client = new LocalLlmClient(builder, false, "http://ollama.test", "gemma4:e4b");
+        LlmSettingRepository settingRepository = org.mockito.Mockito.mock(LlmSettingRepository.class);
+        org.mockito.Mockito.when(settingRepository.findAll()).thenReturn(java.util.List.of(
+                new LlmSetting(false, "OLLAMA", "http://ollama.test", "", "gemma4:e4b")
+        ));
+        LocalLlmClient client = new LocalLlmClient(builder, settingRepository, new com.fasterxml.jackson.databind.ObjectMapper(), false, "http://ollama.test", "gemma4:e4b");
 
         assertThat(client.generate("ignored")).isEmpty();
         server.verify();
@@ -48,7 +54,9 @@ class LocalLlmClientTest {
     void returnsEmptyWhenOllamaRequestFails() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        LocalLlmClient client = new LocalLlmClient(builder, true, "http://ollama.test", "gemma4:e4b");
+        LlmSettingRepository settingRepository = org.mockito.Mockito.mock(LlmSettingRepository.class);
+        org.mockito.Mockito.when(settingRepository.findAll()).thenReturn(java.util.List.of());
+        LocalLlmClient client = new LocalLlmClient(builder, settingRepository, new com.fasterxml.jackson.databind.ObjectMapper(), true, "http://ollama.test", "gemma4:e4b");
 
         server.expect(requestTo("http://ollama.test/api/generate"))
                 .andRespond(withServerError());

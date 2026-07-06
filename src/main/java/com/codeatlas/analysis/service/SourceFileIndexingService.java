@@ -67,7 +67,7 @@ public class SourceFileIndexingService {
     private SourceFile toSourceFile(Project project, Path rootPath, Path path) {
         Path absolutePath = path.toAbsolutePath().normalize();
         String relativePath = rootPath.relativize(absolutePath).toString().replace('\\', '/');
-        SourceFileType type = classify(relativePath);
+        SourceFileType type = classify(absolutePath, relativePath);
 
         try {
             JavaClassMetadata javaClassMetadata = extractJavaClassMetadata(type, absolutePath);
@@ -87,15 +87,28 @@ public class SourceFileIndexingService {
         }
     }
 
-    private SourceFileType classify(String relativePath) {
+    private SourceFileType classify(Path absolutePath, String relativePath) {
         String normalizedPath = relativePath.toLowerCase();
         if (normalizedPath.endsWith(".java")) {
             return SourceFileType.JAVA;
         }
-        if (normalizedPath.endsWith(".xml") && normalizedPath.startsWith("src/main/resources/")) {
-            return SourceFileType.MYBATIS_XML;
-        }
         if (normalizedPath.endsWith(".xml")) {
+            try {
+                try (var reader = Files.newBufferedReader(absolutePath)) {
+                    String line;
+                    int count = 0;
+                    while ((line = reader.readLine()) != null && count < 20) {
+                        if (line.contains("<mapper") || line.contains("mybatis.org")) {
+                            return SourceFileType.MYBATIS_XML;
+                        }
+                        count++;
+                    }
+                }
+            } catch (IOException exception) {
+                if (normalizedPath.startsWith("src/main/resources/")) {
+                    return SourceFileType.MYBATIS_XML;
+                }
+            }
             return SourceFileType.XML;
         }
         return SourceFileType.OTHER;

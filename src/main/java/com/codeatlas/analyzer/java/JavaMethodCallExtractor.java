@@ -151,6 +151,19 @@ public class JavaMethodCallExtractor {
         }
 
         String targetFieldName = methodCall.getScope().orElseThrow().toString();
+        if (targetFieldName.equals("this")) {
+            return new ExtractedMethodCall(
+                    className,
+                    method.getNameAsString(),
+                    null,
+                    className,
+                    methodCall.getNameAsString()
+            );
+        }
+        if (targetFieldName.startsWith("this.")) {
+            targetFieldName = targetFieldName.substring(5);
+        }
+
         return new ExtractedMethodCall(
                 className,
                 method.getNameAsString(),

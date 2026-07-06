@@ -237,3 +237,19 @@ export type QuestionAnswer = {
   relatedTables: string[];
   evidence: string[];
 };
+
+export type LlmSetting = {
+  id?: number;
+  enabled: boolean;
+  provider: string;
+  baseUrl?: string;
+  apiKey?: string;
+  modelName: string;
+  updatedAt?: string;
+};
+
+export type LlmTestResponse = {
+  success: boolean;
+  message: string;
+};
+

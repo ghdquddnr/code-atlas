@@ -7,7 +7,7 @@ import {
   type Edge,
   type Node
 } from "@xyflow/react";
-import { Activity, FileText, GitBranch, Network, RefreshCw } from "lucide-react";
+import { Activity, FileText, GitBranch, Network, RefreshCw, Settings } from "lucide-react";
 import { api } from "./lib/api";
 import { includesQuery, normalize } from "./lib/utils";
 import type {
@@ -28,7 +28,8 @@ import type {
   SpringApi,
   SpringApiDetail,
   TableUsage,
-  TableUsageDetail
+  TableUsageDetail,
+  LlmSetting
 } from "./types";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -65,6 +66,63 @@ function App() {
   const [sourcePath, setSourcePath] = useState("/samples/legacy-spring-mybatis");
   const [uploadName, setUploadName] = useState("uploaded-legacy-project");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [llmEnabled, setLlmEnabled] = useState(true);
+  const [llmProvider, setLlmProvider] = useState("OLLAMA");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmModelName, setLlmModelName] = useState("");
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  async function loadLlmSettings() {
+    try {
+      const settings = await api.getLlmSettings();
+      setLlmEnabled(settings.enabled);
+      setLlmProvider(settings.provider);
+      setLlmBaseUrl(settings.baseUrl ?? "");
+      setLlmApiKey(settings.apiKey ?? "");
+      setLlmModelName(settings.modelName);
+    } catch (e) {
+      console.error("Failed to load LLM settings", e);
+    }
+  }
+
+  async function handleSaveSettings() {
+    await api.saveLlmSettings({
+      enabled: llmEnabled,
+      provider: llmProvider,
+      baseUrl: llmBaseUrl,
+      apiKey: llmApiKey,
+      modelName: llmModelName
+    });
+    setShowSettings(false);
+    setTestResult(null);
+    setStatus("LLM 설정이 성공적으로 저장되었습니다.");
+  }
+
+  async function handleTestConnection() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await api.testLlmConnection({
+        enabled: llmEnabled,
+        provider: llmProvider,
+        baseUrl: llmBaseUrl,
+        apiKey: llmApiKey,
+        modelName: llmModelName
+      });
+      setTestResult(res);
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : "연결 테스트 실패"
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function safeRun(action: () => Promise<void>) {
     try {
@@ -149,6 +207,7 @@ function App() {
 
   useEffect(() => {
     void safeRun(loadProjects);
+    void loadLlmSettings();
   }, []);
 
   return (
@@ -166,6 +225,10 @@ function App() {
           </div>
           <div className="flex items-center gap-2">
             <Badge>React Dashboard</Badge>
+            <Button variant="ghost" onClick={() => setShowSettings(true)}>
+              <Settings className="mr-2 h-4 w-4" />
+              설정
+            </Button>
             <Button variant="secondary" onClick={() => safeRun(loadProjects)}>
               <RefreshCw className="mr-2 h-4 w-4" />
               새로고침
@@ -305,6 +368,98 @@ function App() {
           </section>
         </Card>
       </main>
+
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <Card className="w-[500px] p-6 shadow-2xl bg-white border border-slate-200 rounded-xl">
+            <h2 className="text-xl font-black mb-1 text-slate-900">LLM 설정</h2>
+            <p className="text-sm text-slate-500 mb-4">프로젝트 분석 및 Q&A에 사용할 LLM API를 설정합니다.</p>
+            
+            <div className="grid gap-4">
+              <label className="flex items-center gap-2 font-bold text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={llmEnabled}
+                  onChange={(e) => setLlmEnabled(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                LLM 연동 활성화
+              </label>
+
+              {llmEnabled && (
+                <>
+                  <Label title="Provider">
+                    <Select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)}>
+                      <option value="OLLAMA">Ollama (로컬)</option>
+                      <option value="OPENAI">OpenAI</option>
+                      <option value="ANTHROPIC">Anthropic (Claude)</option>
+                      <option value="GEMINI">Google Gemini</option>
+                    </Select>
+                  </Label>
+
+                  <Label title="API Base URL (선택)">
+                    <Input
+                      placeholder={
+                        llmProvider === "OLLAMA" ? "http://localhost:11434" :
+                        llmProvider === "OPENAI" ? "https://api.openai.com" :
+                        llmProvider === "ANTHROPIC" ? "https://api.anthropic.com" :
+                        "https://generativelanguage.googleapis.com"
+                      }
+                      value={llmBaseUrl}
+                      onChange={(e) => setLlmBaseUrl(e.target.value)}
+                    />
+                  </Label>
+
+                  {llmProvider !== "OLLAMA" && (
+                    <Label title="API Key">
+                      <Input
+                        type="password"
+                        placeholder="API Key 입력"
+                        value={llmApiKey}
+                        onChange={(e) => setLlmApiKey(e.target.value)}
+                      />
+                    </Label>
+                  )}
+
+                  <Label title="Model Name">
+                    <Input
+                      placeholder={
+                        llmProvider === "OLLAMA" ? "gemma4:e4b" :
+                        llmProvider === "OPENAI" ? "gpt-4o" :
+                        llmProvider === "ANTHROPIC" ? "claude-3-5-sonnet-20240620" :
+                        "gemini-1.5-pro"
+                      }
+                      value={llmModelName}
+                      onChange={(e) => setLlmModelName(e.target.value)}
+                    />
+                  </Label>
+                </>
+              )}
+
+              {testResult && (
+                <div className={["rounded-md p-3 text-xs font-semibold mt-2", testResult.success ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"].join(" ")}>
+                  <strong>{testResult.success ? "✓ 연결 성공" : "✗ 연결 실패"}</strong>
+                  <p className="mt-1 break-all whitespace-pre-wrap">{testResult.message}</p>
+                </div>
+              )}
+
+              <div className="flex justify-between gap-2 mt-4 border-t border-slate-100 pt-4">
+                <Button variant="secondary" onClick={handleTestConnection} disabled={testing}>
+                  {testing ? "테스트 중..." : "연결 테스트"}
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="ghost" onClick={() => { setShowSettings(false); setTestResult(null); }}>
+                    취소
+                  </Button>
+                  <Button onClick={handleSaveSettings}>
+                    저장
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

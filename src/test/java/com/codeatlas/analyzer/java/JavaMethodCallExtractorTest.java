@@ -135,4 +135,43 @@ class JavaMethodCallExtractorTest {
                         .extracting(ExtractedJavaField::name, ExtractedJavaField::type)
                         .contains(tuple("customerId", "Long")));
     }
+
+    @Test
+    void extractsMethodCallsWithThisPrefixAndScope(@TempDir Path tempDir) throws IOException {
+        Path sourceFile = tempDir.resolve("ThisCalls.java");
+        Files.writeString(sourceFile, """
+                package com.example.legacy;
+                
+                class OrderService {
+                    private OrderMapper orderMapper;
+                    
+                    void createOrder() {
+                        this.orderMapper.insertOrder();
+                        this.helperMethod();
+                    }
+                    
+                    void helperMethod() {}
+                }
+                
+                interface OrderMapper {
+                    void insertOrder();
+                }
+                """);
+
+        List<ExtractedJavaClass> classes = extractor.extract(sourceFile);
+        ExtractedJavaClass orderService = classes.stream()
+                .filter(c -> c.className().equals("OrderService"))
+                .findFirst().orElseThrow();
+
+        assertThat(orderService.methodCalls())
+                .extracting(
+                        ExtractedMethodCall::callerMethodName,
+                        ExtractedMethodCall::targetClassName,
+                        ExtractedMethodCall::targetMethodName
+                )
+                .containsExactlyInAnyOrder(
+                        tuple("createOrder", "OrderMapper", "insertOrder"),
+                        tuple("createOrder", "OrderService", "helperMethod")
+                );
+    }
 }

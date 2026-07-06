@@ -15,7 +15,9 @@ import type {
   SpringApi,
   SpringApiDetail,
   TableUsage,
-  TableUsageDetail
+  TableUsageDetail,
+  LlmSetting,
+  LlmTestResponse
 } from "../types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -145,5 +147,18 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question })
+    }),
+  getLlmSettings: () => request<LlmSetting>("/api/llm/settings"),
+  saveLlmSettings: (payload: LlmSetting) =>
+    request<LlmSetting>("/api/llm/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }),
+  testLlmConnection: (payload: LlmSetting) =>
+    request<LlmTestResponse>("/api/llm/settings/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     })
 };

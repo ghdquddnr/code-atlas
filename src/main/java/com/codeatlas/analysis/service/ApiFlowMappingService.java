@@ -88,11 +88,36 @@ public class ApiFlowMappingService {
             return List.of();
         }
 
-        return controllerClass.methodCalls().stream()
+        List<ExtractedMethodCall> controllerCalls = controllerClass.methodCalls().stream()
                 .filter(call -> call.callerMethodName().equals(api.getMethodName()))
+                .toList();
+
+        List<ApiFlow> serviceFlows = controllerCalls.stream()
                 .filter(call -> isServiceCall(call, classByName))
                 .flatMap(serviceCall -> mapServiceCall(project, api, serviceCall, classByName, statements).stream())
                 .toList();
+
+        List<ApiFlow> directMapperFlows = controllerCalls.stream()
+                .filter(call -> isMapperCall(call, classByName))
+                .flatMap(mapperCall -> findStatement(mapperCall, statements)
+                        .map(statement -> ApiFlow.create(
+                                project,
+                                api.getHttpMethod(),
+                                api.getPath(),
+                                api.getControllerClassName(),
+                                api.getMethodName(),
+                                null,
+                                null,
+                                statement.getNamespace(),
+                                statement.getStatementId(),
+                                statement.getStatementType(),
+                                mapperCall.ownerClassName() + "." + mapperCall.callerMethodName() + "->" + mapperCall.targetClassName() + "." + mapperCall.targetMethodName(),
+                                statement.getTableNames()
+                        ))
+                        .stream())
+                .toList();
+
+        return java.util.stream.Stream.concat(serviceFlows.stream(), directMapperFlows.stream()).toList();
     }
 
     private List<ApiFlow> mapServiceCall(

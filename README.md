@@ -70,7 +70,7 @@ CodeAtlas는 레거시 Java/Spring 시스템을 분석해 API, 서비스 호출,
 - Frontend: React, TypeScript, Vite, Tailwind CSS, React Flow
 - Build: Gradle Wrapper, npm
 - Runtime: Docker Compose, PostgreSQL
-- Optional AI: Ollama, 기본 모델 `gemma4:e4b`
+- Optional AI: Ollama, OpenAI, Anthropic, Gemini
 - Tests: JUnit, MockMvc, 프론트엔드 린트 및 빌드 검증
 
 ## 빠른 시작
@@ -233,6 +233,14 @@ GET /api/projects/{projectId}/documents/apis
 POST /api/projects/{projectId}/questions
 ```
 
+### LLM 설정
+
+```text
+GET /api/llm/settings
+POST /api/llm/settings
+POST /api/llm/settings/test
+```
+
 ### 스냅샷 비교와 릴리스 검토
 
 ```text
@@ -291,7 +299,18 @@ Docker Compose의 PostgreSQL을 로컬 애플리케이션에서 사용할 경우
 CODE_ATLAS_DB_URL=jdbc:postgresql://localhost:15432/code_atlas
 ```
 
-### 로컬 LLM
+### LLM 연동
+
+대시보드 오른쪽 위의 설정 화면에서 LLM 사용 여부, 제공자, Base URL, API 키, 모델을 저장하고 연결을 테스트할 수 있습니다. 지원 제공자는 다음과 같습니다.
+
+| 제공자 | 기본 Base URL | API 키 |
+| --- | --- | --- |
+| Ollama | `http://localhost:11434` | 불필요 |
+| OpenAI | `https://api.openai.com` | 필요 |
+| Anthropic | `https://api.anthropic.com` | 필요 |
+| Gemini | `https://generativelanguage.googleapis.com` | 필요 |
+
+환경 변수는 저장된 설정이 아직 없을 때 Ollama 기본값을 구성하는 데 사용됩니다.
 
 ```text
 CODE_ATLAS_LLM_ENABLED=true
@@ -306,7 +325,11 @@ CODE_ATLAS_LLM_BASE_URL=http://host.docker.internal:11434
 CODE_ATLAS_LLM_MODEL=gemma4:e4b
 ```
 
-Ollama에 접근할 수 없거나 생성이 실패하면 CodeAtlas는 저장된 분석 근거 기반의 기본 문서와 Q&A 응답을 반환합니다.
+선택한 LLM 제공자에 접근할 수 없거나 생성이 실패하면 CodeAtlas는 저장된 분석 근거 기반의 기본 문서와 Q&A 응답을 반환합니다.
+
+OpenAI, Anthropic, Gemini를 선택할 때는 설정 화면에서 해당 제공자의 API 키와 모델명을 입력합니다. Base URL에는 API의 루트 주소만 입력하며, CodeAtlas가 제공자별 요청 경로를 덧붙입니다.
+
+현재 API 키는 애플리케이션 데이터베이스에 저장되고 설정 조회 API에도 반환됩니다. 개인 개발 환경에서만 사용하고, 외부에 공개된 서버나 운영 환경에 배포하기 전에는 암호화 저장과 응답 마스킹을 적용해야 합니다.
 
 ### GitHub 연동
 

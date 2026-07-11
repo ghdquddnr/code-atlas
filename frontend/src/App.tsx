@@ -28,8 +28,7 @@ import type {
   SpringApi,
   SpringApiDetail,
   TableUsage,
-  TableUsageDetail,
-  LlmSetting
+  TableUsageDetail
 } from "./types";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";

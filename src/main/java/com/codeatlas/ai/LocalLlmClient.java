@@ -41,7 +41,7 @@ public class LocalLlmClient {
     private LlmSetting getActiveSetting() {
         return settingRepository.findAll().stream()
                 .findFirst()
-                .orElseGet(() -> LlmSetting.createDefault(defaultBaseUrl, defaultModel));
+                .orElseGet(() -> new LlmSetting(defaultEnabled, "OLLAMA", defaultBaseUrl, "", defaultModel));
     }
 
     public Optional<String> generate(String prompt) {
